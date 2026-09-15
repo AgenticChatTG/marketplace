@@ -1,0 +1,4 @@
+{
+  "description": "Расход лимита: ui.render на AbovePrompt рисует два бара, таймер читает $.session.usage(), процент на доллар калибруется и хранится в $.store",
+  "modules": ["./register.tsx"]
+}

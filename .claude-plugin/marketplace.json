@@ -1,0 +1,15 @@
+{
+  "name": "agentic-chat",
+  "owner": {
+    "name": "AgenticChatTG"
+  },
+  "description": "Публичный каталог модулей для Claude Code от орга AgenticChatTG: скиллы, сабагенты, команды, MCP, хуки и моды. Ставится поштучно.",
+  "plugins": [
+    {
+      "name": "usage-bar",
+      "source": "./plugins/usage-bar",
+      "description": "Над полем ввода три бара в строку: заполненность контекстного окна, расход пятичасового лимита подписки за сессию и недельный лимит",
+      "version": "0.5.0"
+    }
+  ]
+}

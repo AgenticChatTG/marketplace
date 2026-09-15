@@ -1,0 +1,59 @@
+{
+  "name": "usage-bar",
+  "version": "0.5.0",
+  "description": "Над полем ввода три бара в строку: заполненность контекстного окна, расход пятичасового лимита подписки за сессию и недельный лимит. Цвета выбираются в /config",
+  "userConfig": {
+    "color": {
+      "type": "string",
+      "title": "UsageBar: Color",
+      "description": "Fill of all bars and the context and week figures. Default: the terminal's gray; Claude: orange; the rest are the 16 Windows cmd colors (color /?)",
+      "default": "Default",
+      "options": [
+        "Default",
+        "Claude",
+        "Black",
+        "Blue",
+        "Green",
+        "Aqua",
+        "Red",
+        "Purple",
+        "Yellow",
+        "White",
+        "Gray",
+        "Light Blue",
+        "Light Green",
+        "Light Aqua",
+        "Light Red",
+        "Light Purple",
+        "Light Yellow",
+        "Bright White"
+      ]
+    },
+    "sessionColor": {
+      "type": "string",
+      "title": "UsageBar: Session color",
+      "description": "This session's share of the 5-hour window and its +N% figure; same palette as UsageBar: Color",
+      "default": "Claude",
+      "options": [
+        "Default",
+        "Claude",
+        "Black",
+        "Blue",
+        "Green",
+        "Aqua",
+        "Red",
+        "Purple",
+        "Yellow",
+        "White",
+        "Gray",
+        "Light Blue",
+        "Light Green",
+        "Light Aqua",
+        "Light Red",
+        "Light Purple",
+        "Light Yellow",
+        "Bright White"
+      ]
+    }
+  }
+}
