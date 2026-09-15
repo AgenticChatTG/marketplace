@@ -1,11 +1,10 @@
 import type { EngineInterface, Register, SessionContextUsage, SessionRateLimit, Timer } from 'claude-code'
 
-import { bar, formatDay, formatTime, formatTokens, limitParts, partsWidth, sameWindow } from './meter'
-import type { Paint, Part } from './meter'
+import { bar, formatDay, formatTime, formatTokens, freshSession, limitParts, partsWidth, resumed, sameWindow, track } from './meter'
+import type { Limit, Paint, Part, SessionState, WindowKind } from './meter'
 
 const REFRESH_MS = 2000
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000
-const RESET_SEEN_MS = 10 * 60 * 1000 // сброс окна замечен вовремя, если с него прошло меньше
 const LABEL_COLUMNS = 7 // самая длинная подпись, "context" и "session"; нужна для раскладки столбиком
 const VALUE_COLUMNS = 4 // цифра контекста, до "100%"
 const BAR_COLUMNS = { min: 10, max: 30 }
@@ -36,28 +35,18 @@ const PALETTE: Record<string, string> = {
   'Bright White': '#f2f2f2',
 }
 
-type WindowKind = 'fiveHour' | 'sevenDay'
 const WINDOW_KINDS: ReadonlyArray<readonly [WindowKind, string]> = [
   ['fiveHour', 'five_hour'],
   ['sevenDay', 'seven_day'],
 ]
 
-type Limit = { percent: number; resetsAt?: string }
 type Limits = Partial<Record<WindowKind, Limit>>
-type Tracked = { resetsAt?: string; base: number; last: number } // процент окна, с которого сессия его тратит, и последний
-
-// Что мод помнит о сессии. Лежит в $.store: переменные модуля теряются при перезагрузке.
-type SessionState = {
-  id: string
-  windows: Partial<Record<WindowKind, Tracked>>
-  banked: Record<WindowKind, number> // потрачено сессией в прошлых окнах
-  touchedAt: number
-}
 
 // marked — сколько процентов в конце заполнения выделено цветом сессии; parts — текст справа от бара.
 type Segment = { label: string; filled: number; marked: number; parts: Part[] }
 
 let session: SessionState | null = null
+let costMark = 0 // стоимость сессии в момент, когда её отметки могли устареть; ответ модели её увеличит
 let limits: Limits = {}
 let context: SessionContextUsage | null = null
 let timer: Timer | null = null
@@ -79,34 +68,6 @@ function live(limit: Limit | undefined): Limit | undefined {
   return limit
 }
 
-function freshSession(id: string): SessionState {
-  return { id, windows: {}, banked: { fiveHour: 0, sevenDay: 0 }, touchedAt: 0 }
-}
-
-// Сдвигает отметку сессии в окне по новому чтению; true, если отметка поменялась.
-function track(state: SessionState, kind: WindowKind, { percent, resetsAt }: Limit): boolean {
-  const window = state.windows[kind]
-  if (window === undefined) {
-    // первое чтение за сессию: потраченное в окне до этого момента — не её
-    state.windows[kind] = { resetsAt, base: percent, last: percent }
-    return true
-  }
-  if (!sameWindow(window.resetsAt, resetsAt)) {
-    // окно сбросилось. Потраченное в старом копится. Если сброс был только что, новое окно
-    // сессия тратит с нуля, а если она проспала сброс — с первого чтения
-    const seen = window.resetsAt !== undefined && Date.now() - Date.parse(window.resetsAt) < RESET_SEEN_MS
-    state.banked[kind] += Math.max(0, window.last - window.base)
-    state.windows[kind] = { resetsAt, base: seen ? 0 : percent, last: percent }
-    return true
-  }
-  if (percent !== window.last) {
-    window.base = Math.min(window.base, percent)
-    window.last = percent
-    return true
-  }
-  return false
-}
-
 async function save($: EngineInterface): Promise<void> {
   if (session !== null) {
     session.touchedAt = Date.now()
@@ -117,22 +78,27 @@ async function save($: EngineInterface): Promise<void> {
 async function refresh($: EngineInterface): Promise<void> {
   const [id, usage] = await Promise.all([$.session.id(), $.session.usage()])
   context = usage.context
+  const cost = usage.cost?.usd
   let changed = false
 
   if (session === null || session.id !== id) {
     const saved = (await $.store.get(`session:${id}`)) as SessionState | undefined
     // у отметок до 0.5.0 другая форма, их сессия начинает заново
-    session = typeof saved?.banked === 'object' && saved.windows ? saved : freshSession(id)
+    session = typeof saved?.banked === 'object' && saved.windows ? resumed(saved) : freshSession(id)
+    costMark = cost ?? 0
     if (limits.fiveHour === undefined && limits.sevenDay === undefined) {
       limits = ((await $.store.get('limits')) as Limits | undefined) ?? {}
     }
     changed = true
   }
 
+  // стоимость могла обнулиться уже после отметки (/clear); где хост её не ведёт, каждое чтение считается своим
+  costMark = Math.min(costMark, cost ?? costMark)
+  const replied = cost === undefined || cost > costMark
   const latest: Limits = {}
   for (const [kind, apiKind] of WINDOW_KINDS) {
     const reading = asLimit(usage.rateLimits.find(rateLimit => rateLimit.kind === apiKind))
-    if (reading && track(session, kind, reading)) {
+    if (reading && track(session, kind, reading, replied)) {
       changed = true
     }
     latest[kind] = reading ?? limits[kind]
