@@ -1,13 +1,13 @@
 import type { EngineInterface, Register, SessionContextUsage, SessionRateLimit, Timer } from 'claude-code'
 
-import { bar, formatDay, formatTime, formatTokens, sameWindow } from './meter'
-import type { Paint } from './meter'
+import { bar, formatDay, formatTime, formatTokens, limitParts, partsWidth, sameWindow } from './meter'
+import type { Paint, Part } from './meter'
 
 const REFRESH_MS = 2000
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000
 const RESET_SEEN_MS = 10 * 60 * 1000 // сброс окна замечен вовремя, если с него прошло меньше
 const LABEL_COLUMNS = 7 // самая длинная подпись, "context" и "session"; нужна для раскладки столбиком
-const VALUE_COLUMNS = 4 // "+12%", "100%"
+const VALUE_COLUMNS = 4 // цифра контекста, до "100%"
 const BAR_COLUMNS = { min: 10, max: 30 }
 const SEGMENT_GAP = 3
 const MARKER_COLUMNS = 4 // значок [-] полосы справа
@@ -54,8 +54,8 @@ type SessionState = {
   touchedAt: number
 }
 
-// marked — сколько процентов в конце заполнения выделено цветом сессии; paint — цвет цифры.
-type Segment = { label: string; filled: number; marked: number; value: string; paint: Paint; note: string }
+// marked — сколько процентов в конце заполнения выделено цветом сессии; parts — текст справа от бара.
+type Segment = { label: string; filled: number; marked: number; parts: Part[] }
 
 let session: SessionState | null = null
 let limits: Limits = {}
@@ -161,18 +161,20 @@ function windowFigures(kind: WindowKind): { window: Limit; mine: number; total: 
 // Одной строкой с подписями, одной строкой без подписей, а если и так тесно — столбиком без подписей.
 function layout(columns: number, segments: readonly Segment[]): { row: boolean; notes: boolean; bar: number } {
   const count = segments.length
-  const fixed = segments.reduce((sum, segment) => sum + segment.label.length + VALUE_COLUMNS + 2, 0)
-    + (count - 1) * SEGMENT_GAP + MARKER_COLUMNS
-  const notes = segments.reduce((sum, segment) => sum + (segment.note ? segment.note.length + 1 : 0), 0)
-  const withNotes = Math.min(BAR_COLUMNS.max, Math.floor((columns - fixed - notes) / count))
+  // всё, кроме баров: метка, два пробела вокруг бара, текст справа; между сегментами зазор
+  const rowWidth = (notes: boolean) => segments.reduce(
+    (sum, segment) => sum + segment.label.length + 2 + partsWidth(segment.parts, notes), 0,
+  ) + (count - 1) * SEGMENT_GAP + MARKER_COLUMNS
+  const withNotes = Math.min(BAR_COLUMNS.max, Math.floor((columns - rowWidth(true)) / count))
   if (withNotes >= BAR_COLUMNS.min) {
     return { row: true, notes: true, bar: withNotes }
   }
-  const bare = Math.min(BAR_COLUMNS.max, Math.floor((columns - fixed) / count))
+  const bare = Math.min(BAR_COLUMNS.max, Math.floor((columns - rowWidth(false)) / count))
   if (bare >= BAR_COLUMNS.min) {
     return { row: true, notes: false, bar: bare }
   }
-  return { row: false, notes: false, bar: Math.min(BAR_COLUMNS.max, columns - LABEL_COLUMNS - VALUE_COLUMNS - 2 - MARKER_COLUMNS) }
+  const figures = Math.max(...segments.map(segment => partsWidth(segment.parts, false)))
+  return { row: false, notes: false, bar: Math.min(BAR_COLUMNS.max, columns - LABEL_COLUMNS - figures - 2 - MARKER_COLUMNS) }
 }
 
 async function tick($: EngineInterface): Promise<void> {
@@ -237,16 +239,18 @@ export const register: Register = (on, options) => {
 
     // tokens нет до первого ответа в свежей сессии и сразу после compact
     const contextPercent = context.tokens === undefined ? null : (context.tokens / context.window) * 100
+    const contextNote = context.tokens === undefined
+      ? 'updates after a reply'
+      : `${formatTokens(context.tokens)} of ${formatTokens(context.window)}`
     const segments: Segment[] = [
       {
         label: 'context',
         filled: contextPercent ?? 0,
         marked: 0,
-        value: contextPercent === null ? '—' : `${Math.round(contextPercent)}%`,
-        paint: 'fill',
-        note: context.tokens === undefined
-          ? 'updates after a reply'
-          : `${formatTokens(context.tokens)} of ${formatTokens(context.window)}`,
+        parts: [
+          { text: (contextPercent === null ? '—' : `${Math.round(contextPercent)}%`).padEnd(VALUE_COLUMNS), paint: 'fill' },
+          { text: ` ${contextNote}`, note: true },
+        ],
       },
     ]
     // у обоих лимитов бар — всё окно, цветом сессии выделено то, что потратила сессия; ↻ — время сброса
@@ -258,9 +262,7 @@ export const register: Register = (on, options) => {
           label,
           filled: window.percent,
           marked: mine,
-          value: `+${Math.round(total)}%`,
-          paint: 'mark',
-          note: `of ${Math.round(window.percent)}%${window.resetsAt ? ` ↻${formatReset(window.resetsAt)}` : ''}`,
+          parts: limitParts(window.percent, total, window.resetsAt ? formatReset(window.resetsAt) : undefined),
         })
       }
     }
@@ -291,10 +293,13 @@ export const register: Register = (on, options) => {
                   </Text>
                 ))}
               </Box>
-              <Text color={colors[segment.paint]} bold>
-                {segment.value.padEnd(VALUE_COLUMNS)}
+              <Text>
+                {segment.parts.filter(part => fit.notes || !part.note).map(part => (
+                  part.paint
+                    ? <Text color={colors[part.paint]} bold>{part.text}</Text>
+                    : <Text dimColor>{part.text}</Text>
+                ))}
               </Text>
-              {fit.notes && segment.note ? <Text dimColor>{segment.note}</Text> : null}
             </Box>
           ))}
         </Box>
