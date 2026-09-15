@@ -10,6 +10,74 @@ export function sameWindow(a: string | undefined, b: string | undefined): boolea
   return Math.abs(Date.parse(a) - Date.parse(b)) < WINDOW_JITTER_MS
 }
 
+const RESET_SEEN_MS = 10 * 60 * 1000 // сброс окна замечен вовремя, если с него прошло меньше
+
+export type WindowKind = 'fiveHour' | 'sevenDay'
+export type Limit = { percent: number; resetsAt?: string }
+// Процент окна, с которого сессия его тратит, и последний. stale — последнее чтение могло устареть,
+// и пока сессия не получит ответ модели, прирост окна тратит не она.
+export type Tracked = { resetsAt?: string; base: number; last: number; stale?: boolean }
+
+// Что мод помнит о сессии. Лежит в $.store: переменные модуля теряются при перезагрузке.
+export type SessionState = {
+  id: string
+  windows: Partial<Record<WindowKind, Tracked>>
+  banked: Record<WindowKind, number> // потрачено сессией в прошлых окнах
+  touchedAt: number
+}
+
+export function freshSession(id: string): SessionState {
+  return { id, windows: {}, banked: { fiveHour: 0, sevenDay: 0 }, touchedAt: 0 }
+}
+
+// Сессия из хранилища: её продолжили (claude -c, /resume) или перезагрузили мод. Сколько окна набрали
+// с её последнего чтения, неизвестно, этот прирост ей не засчитывается.
+export function resumed(state: SessionState): SessionState {
+  for (const window of Object.values(state.windows)) {
+    if (window !== undefined) {
+      window.stale = true
+    }
+  }
+  return state
+}
+
+// Сдвигает отметку сессии в окне по новому чтению; true, если отметка поменялась.
+// replied — сессия получила ответ модели с тех пор, как её отметки могли устареть.
+export function track(state: SessionState, kind: WindowKind, { percent, resetsAt }: Limit, replied: boolean, now = Date.now()): boolean {
+  const window = state.windows[kind]
+  if (window === undefined) {
+    // первое чтение за сессию: потраченное в окне до этого момента — не её. До ответа модели
+    // чтение досталось от прошлой сессии процесса (после /clear) и тоже могло устареть
+    state.windows[kind] = { resetsAt, base: percent, last: percent, ...(replied ? {} : { stale: true }) }
+    return true
+  }
+  if (!sameWindow(window.resetsAt, resetsAt)) {
+    // окно сбросилось. Потраченное в старом копится. Если сброс был только что, новое окно
+    // сессия тратит с нуля, а если она проспала сброс или стояла — с первого чтения
+    const seen = !window.stale && window.resetsAt !== undefined && now - Date.parse(window.resetsAt) < RESET_SEEN_MS
+    state.banked[kind] += Math.max(0, window.last - window.base)
+    state.windows[kind] = { resetsAt, base: seen ? 0 : percent, last: percent, ...(window.stale && !replied ? { stale: true } : {}) }
+    return true
+  }
+  if (window.stale) {
+    // прирост с устаревшего чтения потратили другие сессии, пока эта стояла. Отметка сдвигается
+    // целиком, и если с ним совпал первый ответ самой сессии, он уходит тоже: их не различить
+    const changed = percent !== window.last || replied
+    window.base += percent - window.last
+    window.last = percent
+    if (replied) {
+      delete window.stale
+    }
+    return changed
+  }
+  if (percent !== window.last) {
+    window.base = Math.min(window.base, percent)
+    window.last = percent
+    return true
+  }
+  return false
+}
+
 export type Paint = 'fill' | 'mark' | 'free'
 export type Run = { text: string; color: Paint; background?: Paint }
 
