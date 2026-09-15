@@ -82,3 +82,25 @@ const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 export function formatDay(iso: string): string {
   return `${WEEKDAYS[new Date(iso).getDay()]} ${formatTime(iso)}`
 }
+
+// Кусок текста справа от бара: цифра своим цветом или тусклый текст. note — подпись, её прячут первой, когда тесно.
+export type Part = { text: string; paint?: Paint; note?: boolean }
+
+const DIVIDER = ' | '
+
+// Текст лимита: процент окна | прирост за сессию | ↻ время сброса.
+export function limitParts(percent: number, spent: number, reset: string | undefined): Part[] {
+  const parts: Part[] = [
+    { text: `${Math.round(percent)}%`, paint: 'fill' },
+    { text: DIVIDER },
+    { text: `+${Math.round(spent)}%`, paint: 'mark' },
+  ]
+  if (reset !== undefined) {
+    parts.push({ text: `${DIVIDER}↻${reset}`, note: true })
+  }
+  return parts
+}
+
+export function partsWidth(parts: readonly Part[], notes: boolean): number {
+  return parts.reduce((sum, part) => sum + (notes || !part.note ? part.text.length : 0), 0)
+}
