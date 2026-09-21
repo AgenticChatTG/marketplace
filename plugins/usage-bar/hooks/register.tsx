@@ -84,7 +84,7 @@ async function refresh($: EngineInterface): Promise<void> {
   if (session === null || session.id !== id) {
     const saved = (await $.store.get(`session:${id}`)) as SessionState | undefined
     // у отметок до 0.5.0 другая форма, их сессия начинает заново
-    session = typeof saved?.banked === 'object' && saved.windows ? resumed(saved) : freshSession(id)
+    session = typeof saved?.windows === 'object' ? resumed(saved) : freshSession(id)
     costMark = cost ?? 0
     if (limits.fiveHour === undefined && limits.sevenDay === undefined) {
       limits = ((await $.store.get('limits')) as Limits | undefined) ?? {}
@@ -113,15 +113,16 @@ async function refresh($: EngineInterface): Promise<void> {
 }
 
 // Окно лимита и доля сессии в нём; null, пока лимит не читался ни разу (ключ API без подписки).
-function windowFigures(kind: WindowKind): { window: Limit; mine: number; total: number } | null {
+// Доля считается только по текущему окну: после сброса сессия начинает его с нуля, как и само окно.
+function windowFigures(kind: WindowKind): { window: Limit; mine: number } | null {
   const window = live(limits[kind])
   if (session === null || window === undefined) {
     return null
   }
   const tracked = session.windows[kind]
-  const spent = tracked ? Math.max(0, tracked.last - tracked.base) : 0
   const inWindow = tracked !== undefined && sameWindow(tracked.resetsAt, window.resetsAt)
-  return { window, mine: inWindow ? Math.min(window.percent, spent) : 0, total: session.banked[kind] + spent }
+  const spent = inWindow ? Math.max(0, tracked.last - tracked.base) : 0
+  return { window, mine: Math.min(window.percent, spent) }
 }
 
 // Одной строкой с подписями, одной строкой без подписей, а если и так тесно — столбиком без подписей.
@@ -223,12 +224,12 @@ export const register: Register = (on, options) => {
     const limitSegment = (label: string, kind: WindowKind, formatReset: (iso: string) => string) => {
       const figures = windowFigures(kind)
       if (figures !== null) {
-        const { window, mine, total } = figures
+        const { window, mine } = figures
         segments.push({
           label,
           filled: window.percent,
           marked: mine,
-          parts: limitParts(window.percent, total, window.resetsAt ? formatReset(window.resetsAt) : undefined),
+          parts: limitParts(window.percent, mine, window.resetsAt ? formatReset(window.resetsAt) : undefined),
         })
       }
     }

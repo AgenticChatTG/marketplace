@@ -22,23 +22,23 @@ export type Tracked = { resetsAt?: string; base: number; last: number; stale?: b
 export type SessionState = {
   id: string
   windows: Partial<Record<WindowKind, Tracked>>
-  banked: Record<WindowKind, number> // потрачено сессией в прошлых окнах
   touchedAt: number
 }
 
 export function freshSession(id: string): SessionState {
-  return { id, windows: {}, banked: { fiveHour: 0, sevenDay: 0 }, touchedAt: 0 }
+  return { id, windows: {}, touchedAt: 0 }
 }
 
 // Сессия из хранилища: её продолжили (claude -c, /resume) или перезагрузили мод. Сколько окна набрали
-// с её последнего чтения, неизвестно, этот прирост ей не засчитывается.
-export function resumed(state: SessionState): SessionState {
-  for (const window of Object.values(state.windows)) {
+// с её последнего чтения, неизвестно, этот прирост ей не засчитывается. Поля отбираются поимённо:
+// у отметок 0.5.0–0.5.2 в хранилище лежит ещё banked, а с 0.5.3 его никто не читает.
+export function resumed({ id, windows, touchedAt }: SessionState): SessionState {
+  for (const window of Object.values(windows)) {
     if (window !== undefined) {
       window.stale = true
     }
   }
-  return state
+  return { id, windows, touchedAt }
 }
 
 // Сдвигает отметку сессии в окне по новому чтению; true, если отметка поменялась.
@@ -52,10 +52,10 @@ export function track(state: SessionState, kind: WindowKind, { percent, resetsAt
     return true
   }
   if (!sameWindow(window.resetsAt, resetsAt)) {
-    // окно сбросилось. Потраченное в старом копится. Если сброс был только что, новое окно
-    // сессия тратит с нуля, а если она проспала сброс или стояла — с первого чтения
+    // окно сбросилось, и вместе с ним отметка: сессия показывает свой расход в текущем окне, а не за
+    // всю свою жизнь, иначе цифра разъезжается с баром. Если сброс был только что, новое окно сессия
+    // тратит с нуля, а если она проспала сброс или стояла — с первого чтения
     const seen = !window.stale && window.resetsAt !== undefined && now - Date.parse(window.resetsAt) < RESET_SEEN_MS
-    state.banked[kind] += Math.max(0, window.last - window.base)
     state.windows[kind] = { resetsAt, base: seen ? 0 : percent, last: percent, ...(window.stale && !replied ? { stale: true } : {}) }
     return true
   }
