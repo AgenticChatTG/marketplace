@@ -216,7 +216,7 @@ describe('the band', () => {
     expect(await ui.find({ type: 'Text', text: /read 80k/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: 'wrote 1k' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /new 300/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^⏱[45]:\d\d$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^⏱ [45]:\d\d$/ })).toBeDefined()
     await ui.unmount()
     expect(calls.status.at(-1)).toMatch(/^cache 98% · [45]:\d\d$/)
   })
@@ -238,7 +238,7 @@ describe('the band', () => {
     expect(calls.logs.join('\n')).toContain('1h cache (ENABLE_PROMPT_CACHING_1H)')
     await step($)
     const ui = await band($)
-    expect(await ui.find({ type: 'Text', text: /^⏱(1:00:00|59:\d\d)$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^⏱ (1:00:00|59:\d\d)$/ })).toBeDefined()
     await ui.unmount()
   })
 
@@ -380,7 +380,7 @@ describe('UsageBar: бары и кеш в одной полосе', () => {
     expect(await ui.find({ type: 'Text', text: 'context' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: 'session' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: 'cache' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^⏱(1:00:00|59:\d\d)$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^⏱ (1:00:00|59:\d\d)$/ })).toBeDefined()
     await ui.unmount()
   })
 
