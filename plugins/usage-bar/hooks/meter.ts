@@ -154,7 +154,7 @@ export function formatDay(iso: string): string {
 // Кусок текста справа от бара: цифра своим цветом или тусклый текст. note — подпись, её прячут первой, когда тесно.
 export type Part = { text: string; paint?: Paint; note?: boolean }
 
-const DIVIDER = ' | '
+export const DIVIDER = ' | '
 
 // Текст лимита: процент окна | прирост за сессию | ↻ время сброса.
 export function limitParts(percent: number, spent: number, reset: string | undefined): Part[] {

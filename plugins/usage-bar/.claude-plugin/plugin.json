@@ -1,6 +1,6 @@
 {
   "name": "usage-bar",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Над полем ввода три бара в строку: заполненность контекстного окна, расход пятичасового лимита подписки за сессию и недельный лимит. Под ними строка кеша промпта: сколько прочитано из кеша и сколько до его истечения, /cache открывает таблицу по ходам. Цвета и кеш настраиваются в /config",
   "userConfig": {
     "color": {
@@ -58,7 +58,7 @@
     "cacheRow": {
       "type": "boolean",
       "title": "UsageBar: Cache row",
-      "description": "Show the prompt-cache row under the bars: hit rate, tokens read, written and sent uncached, the countdown to expiry and what to do about it",
+      "description": "Show the prompt-cache row under the bars, styled like them: share of the prompt read from the cache, tokens read, written and sent uncached, the countdown to expiry and, when the cache is not warm, what to do about it",
       "default": true
     },
     "cacheTtl": {
@@ -75,7 +75,7 @@
     "cacheWarnSeconds": {
       "type": "number",
       "title": "UsageBar: Cache warning (s)",
-      "description": "Seconds left on the countdown at which the cache row turns red and a toast reminds you the cache is about to lapse",
+      "description": "Seconds left on the countdown at which it turns the session color and a toast reminds you the cache is about to lapse",
       "default": 60
     },
     "cacheCompactAtTokens": {

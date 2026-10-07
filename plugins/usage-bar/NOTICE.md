@@ -5,7 +5,7 @@
 (`cli-tool/components/mods/observability/prompt-cache-control`, коммит `55457cf` от 4 окт 2026):
 
 - `hooks/cache.ts` скопирован целиком, правка одна: три `!` в `segments()` под строгий режим TypeScript;
-- хуки и отрисовка кеша в `hooks/register.tsx` вклеены из `prompt-cache-control.tsx`, свои правки там помечены;
+- хуки, панель `/cache` и уведомления в `hooks/register.tsx` вклеены из `prompt-cache-control.tsx`, свои правки там помечены «UsageBar:». Строку кеша над полем ввода UsageBar рисует сам, в стиле своих баров;
 - `tests/cache.test.tsx` взят из `tests/cache.test.tsx` того же мода и подогнан под UsageBar.
 
 Лицензия оригинала:
