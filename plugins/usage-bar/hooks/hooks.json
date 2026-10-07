@@ -1,4 +1,6 @@
 {
-  "description": "Расход лимита: ui.render на AbovePrompt рисует два бара, таймер читает $.session.usage(), процент на доллар калибруется и хранится в $.store",
-  "modules": ["./register.tsx"]
+  "description": "Расход лимита и кеш промпта: ui.render на AbovePrompt рисует бары context/session/week и строку кеша, таймер читает $.session.usage(), turn.step собирает cache_read/creation каждого запроса, /cache открывает панель по ходам (кеш вклеен из prompt-cache-control, см. NOTICE.md)",
+  "modules": [
+    "./register.tsx"
+  ]
 }

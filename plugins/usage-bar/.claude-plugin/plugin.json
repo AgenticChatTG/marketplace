@@ -1,7 +1,7 @@
 {
   "name": "usage-bar",
-  "version": "0.5.3",
-  "description": "Над полем ввода три бара в строку: заполненность контекстного окна, расход пятичасового лимита подписки за сессию и недельный лимит. Цвета выбираются в /config",
+  "version": "0.6.0",
+  "description": "Над полем ввода три бара в строку: заполненность контекстного окна, расход пятичасового лимита подписки за сессию и недельный лимит. Под ними строка кеша промпта: сколько прочитано из кеша и сколько до его истечения, /cache открывает таблицу по ходам. Цвета и кеш настраиваются в /config",
   "userConfig": {
     "color": {
       "type": "string",
@@ -54,6 +54,47 @@
         "Light Yellow",
         "Bright White"
       ]
+    },
+    "cacheRow": {
+      "type": "boolean",
+      "title": "UsageBar: Cache row",
+      "description": "Show the prompt-cache row under the bars: hit rate, tokens read, written and sent uncached, the countdown to expiry and what to do about it",
+      "default": true
+    },
+    "cacheTtl": {
+      "type": "string",
+      "title": "UsageBar: Cache lifetime",
+      "description": "How long the cache lives after a request: auto follows Claude Code's own rules (FORCE_PROMPT_CACHING_5M, CLAUDE_CODE_PROMPT_CACHE_TTL, the promptCacheTtl setting, ENABLE_PROMPT_CACHING_1H, then 1 hour on a Claude subscription and 5 minutes on an API key, cloud provider or usage credits) and corrects itself from request timing; 5m or 1h pins it",
+      "default": "auto",
+      "options": [
+        "auto",
+        "5m",
+        "1h"
+      ]
+    },
+    "cacheWarnSeconds": {
+      "type": "number",
+      "title": "UsageBar: Cache warning (s)",
+      "description": "Seconds left on the countdown at which the cache row turns red and a toast reminds you the cache is about to lapse",
+      "default": 60
+    },
+    "cacheCompactAtTokens": {
+      "type": "number",
+      "title": "UsageBar: Cache large context (tokens)",
+      "description": "From this prompt size up, an expired cache suggests /compact (or /clear) before you pay to write the whole prefix again",
+      "default": 100000
+    },
+    "cacheToast": {
+      "type": "boolean",
+      "title": "UsageBar: Cache toasts",
+      "description": "Toasts as the cache lapses: at the warning threshold, then at 10, 3, 2 and 1 seconds, once per cache entry each (only for prompts of 20k tokens or more)",
+      "default": true
+    },
+    "cacheStatus": {
+      "type": "boolean",
+      "title": "UsageBar: Cache in status line",
+      "description": "Also pin a short entry (hit rate and countdown) under the prompt",
+      "default": false
     }
   }
 }
