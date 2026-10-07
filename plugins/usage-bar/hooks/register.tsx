@@ -3,7 +3,6 @@ import type { EngineInterface, Register, SessionContextUsage, SessionRateLimit, 
 import {
   accountOf,
   advise,
-  bar as cacheBar,
   byTurn,
   COUNTDOWN_MARKS,
   decideTtl,
@@ -23,7 +22,7 @@ import {
   segments as cacheSegments,
 } from './cache'
 import type { Account, Advice, CacheEnv, Sample, Ttl } from './cache'
-import { bar, formatDay, formatTime, formatTokens, freshSession, limitParts, partsWidth, resumed, sameWindow, track } from './meter'
+import { bar, DIVIDER, formatDay, formatTime, formatTokens, freshSession, limitParts, partsWidth, resumed, sameWindow, track } from './meter'
 import type { Limit, Paint, Part, SessionState, WindowKind } from './meter'
 
 const REFRESH_MS = 2000
@@ -288,6 +287,33 @@ function shortLine(policy: CachePolicy, now: number): string {
   return `cache ${Math.round(hitRatio(last) * 100)}%${clock}`
 }
 
+// UsageBar: строка кеша в стиле баров. Бар — состав последнего запроса: основным цветом прочитанное из кеша,
+// цветом сессии записанное в кеш этим запросом (то, что добавилось сейчас, как +N% у лимитов). Справа через |:
+// доля из кеша, read, wrote, new, ⏱ до истечения. Цветом заполнения доля, цветом сессии wrote, остальное тусклое;
+// отсчёт загорается цветом сессии, только когда кеш вот-вот истечёт или истёк, подсказка — только когда кеш не тёплый.
+// Когда тесно, первыми пропадают read, new и подсказка. В оригинале здесь светофор из зелёного, жёлтого и красного
+function cacheSegment(last: Sample, advice: Advice, left: number): Segment {
+  if (advice.kind === 'uncached') {
+    return { label: 'cache', filled: 0, marked: 0, parts: [{ text: '—', paint: 'fill' }, { text: `${DIVIDER}not cached` }] }
+  }
+  const total = promptTokens(last)
+  const share = (tokens: number) => (total === 0 ? 0 : (tokens / total) * 100)
+  const urgent = advice.kind === 'soon' || advice.kind === 'expired'
+  const parts: Part[] = [
+    { text: `${Math.round(hitRatio(last) * 100)}%`, paint: 'fill' },
+    { text: `${DIVIDER}read ${fmtTokens(last.read)}`, note: true },
+    { text: DIVIDER },
+    { text: `wrote ${fmtTokens(last.write)}`, paint: 'mark' },
+    { text: `${DIVIDER}new ${fmtTokens(last.fresh)}`, note: true },
+    { text: DIVIDER },
+    urgent ? { text: `⏱${fmtClock(left)}`, paint: 'mark' } : { text: `⏱${fmtClock(left)}` },
+  ]
+  if (advice.kind !== 'warm') {
+    parts.push({ text: ` · ${advice.text}`, note: true })
+  }
+  return { label: 'cache', filled: share(last.read + last.write), marked: share(last.write), parts }
+}
+
 // the promptCacheTtl setting, from the settings files that can carry it (local over project over user)
 async function readSetting($: EngineInterface): Promise<unknown> {
   const home = await $.env.get('HOME').catch(() => undefined)
@@ -520,9 +546,33 @@ export const register: Register = (on, options) => {
 
     const { Box, Text } = $.ui.resolve(e)
     const columns = e.props.bodyColumns // UsageBar: в оригинале e.viewport.columns
-    const color = COLOR[advice.kind]
-    const ratio = last ? hitRatio(last) : 0
-    const wide = columns >= 90
+    const cache = showCache && last && advice.kind !== 'off' ? cacheSegment(last, advice, left) : null
+    // бар кеша той же ширины, что и бары лимитов; подсказка справа, только если влезает
+    const cacheBarWidth = usage?.fit.bar ?? BAR_COLUMNS.min
+    const cacheNotes = cache !== null && cache.label.length + 2 + cacheBarWidth + partsWidth(cache.parts, true) <= columns
+    const drawSegment = (segment: Segment, barWidth: number, notes: boolean, label: string) => (
+      <Box flexDirection="row" gap={1}>
+        <Text dimColor>{label}</Text>
+        <Box flexDirection="row">
+          {bar(barWidth, segment.filled, segment.marked).map(run => (
+            <Text
+              color={colors[run.color]}
+              {...(run.background ? { backgroundColor: colors[run.background] } : {})}
+              {...(run.color === 'free' ? { dimColor: true } : {})}
+            >
+              {run.text}
+            </Text>
+          ))}
+        </Box>
+        <Text>
+          {segment.parts.filter(part => notes || !part.note).map(part => (
+            part.paint
+              ? <Text color={colors[part.paint]} bold>{part.text}</Text>
+              : <Text dimColor>{part.text}</Text>
+          ))}
+        </Text>
+      </Box>
+    )
     const below = await next(e)
     // обе строки по центру полосы, вплотную; то, что рисует движок, остаётся как было
     return (
@@ -530,52 +580,15 @@ export const register: Register = (on, options) => {
         <Box flexDirection="column" alignItems="center">
           {usage !== null ? (
             <Box flexDirection={usage.fit.row ? 'row' : 'column'} columnGap={SEGMENT_GAP}>
-              {usage.segments.map(segment => (
-                <Box flexDirection="row" gap={1}>
-                  <Text dimColor>{usage.fit.row ? segment.label : segment.label.padEnd(LABEL_COLUMNS)}</Text>
-                  <Box flexDirection="row">
-                    {bar(usage.fit.bar, segment.filled, segment.marked).map(run => (
-                      <Text
-                        color={colors[run.color]}
-                        {...(run.background ? { backgroundColor: colors[run.background] } : {})}
-                        {...(run.color === 'free' ? { dimColor: true } : {})}
-                      >
-                        {run.text}
-                      </Text>
-                    ))}
-                  </Box>
-                  <Text>
-                    {segment.parts.filter(part => usage.fit.notes || !part.note).map(part => (
-                      part.paint
-                        ? <Text color={colors[part.paint]} bold>{part.text}</Text>
-                        : <Text dimColor>{part.text}</Text>
-                    ))}
-                  </Text>
-                </Box>
+              {usage.segments.map(segment => drawSegment(
+                segment, usage.fit.bar, usage.fit.notes, usage.fit.row ? segment.label : segment.label.padEnd(LABEL_COLUMNS),
               ))}
             </Box>
           ) : null}
-          {showCache && !last ? (
+          {showCache && cache === null ? (
             <Text dimColor>{fitText(`cache: ${advice.text}`, columns)}</Text>
           ) : null}
-          {showCache && last ? (
-            <Box flexDirection="row" columnGap={1}>
-              <Text bold color={color}>{advice.kind === 'warm' ? '●' : advice.kind === 'soon' ? '▲' : advice.kind === 'off' || advice.kind === 'cold' || advice.kind === 'uncached' ? '○' : '✖'}</Text>
-              <Text bold color="cyan">cache</Text>
-              <Text color={color}>{cacheBar(ratio, wide ? 10 : 6)}</Text>
-              <Text bold>{`${Math.round(ratio * 100)}%`}</Text>
-              {/* UsageBar: в оригинале три Text во фрагменте <>…</>, а движок кладёт фрагмент столбиком,
-                  и wrote с new уезжали на две строки ниже. Здесь каждый Text сам по себе */}
-              {wide ? <Text color="green">{`read ${fmtTokens(last.read)}`}</Text> : null}
-              {wide ? <Text color="yellow">{`wrote ${fmtTokens(last.write)}`}</Text> : null}
-              {wide ? <Text color="cyan">{`new ${fmtTokens(last.fresh)}`}</Text> : null}
-              {wide ? null : <Text dimColor>{`${fmtTokens(promptTokens(last))} tok`}</Text>}
-              {advice.kind !== 'uncached' && advice.kind !== 'off' && (
-                <Text bold color={left > 0 ? lifeColor(left, ttl, cacheConfig.policy.warnMs) : 'red'}>{left > 0 ? `⏱ ${fmtClock(left)}` : '⏱ 0:00'}</Text>
-              )}
-              <Text dimColor wrap="truncate-end">{`${ttl} · ${advice.text}`}</Text>
-            </Box>
-          ) : null}
+          {cache !== null ? drawSegment(cache, cacheBarWidth, cacheNotes, 'cache') : null}
         </Box>
         {below}
       </Box>

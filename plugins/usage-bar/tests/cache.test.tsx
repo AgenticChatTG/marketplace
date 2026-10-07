@@ -1,6 +1,6 @@
 // Тесты строки кеша. Взяты из prompt-cache-control (claude-code-templates, MIT, см. ../NOTICE.md)
 // и подогнаны под UsageBar: ключи настроек с префиксом cache, имя плагина usage-bar, заглушки
-// session.id, store и ui.render для баров лимита, ширина полосы в props. Запуск: claude plugin test <папка UsageBar>
+// session.id, store и ui.render для баров лимита, ширина полосы в props, строка кеша в стиле баров. Запуск: claude plugin test <папка UsageBar>
 import { describe, expect, test } from 'claude-code/testing'
 import {
   advise,
@@ -212,10 +212,11 @@ describe('the band', () => {
     await step($)
     const ui = await band($)
     expect(await ui.find({ type: 'Text', text: /98%/ })).toBeDefined()
+    // UsageBar: строка в стиле баров — доля из кеша | read | wrote | new | ⏱ до истечения (5 минут без подписки)
     expect(await ui.find({ type: 'Text', text: /read 80k/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /wrote 1k/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'wrote 1k' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /new 300/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /5m · warm/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^⏱[45]:\d\d$/ })).toBeDefined()
     await ui.unmount()
     expect(calls.status.at(-1)).toMatch(/^cache 98% · [45]:\d\d$/)
   })
@@ -237,7 +238,7 @@ describe('the band', () => {
     expect(calls.logs.join('\n')).toContain('1h cache (ENABLE_PROMPT_CACHING_1H)')
     await step($)
     const ui = await band($)
-    expect(await ui.find({ type: 'Text', text: /1h · warm/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^⏱(1:00:00|59:\d\d)$/ })).toBeDefined()
     await ui.unmount()
   })
 
@@ -379,7 +380,7 @@ describe('UsageBar: бары и кеш в одной полосе', () => {
     expect(await ui.find({ type: 'Text', text: 'context' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: 'session' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: 'cache' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /1h · warm/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^⏱(1:00:00|59:\d\d)$/ })).toBeDefined()
     await ui.unmount()
   })
 
