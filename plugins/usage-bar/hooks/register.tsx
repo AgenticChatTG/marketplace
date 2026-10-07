@@ -306,7 +306,7 @@ function cacheSegment(last: Sample, advice: Advice, left: number): Segment {
     { text: `wrote ${fmtTokens(last.write)}`, paint: 'mark' },
     { text: `${DIVIDER}new ${fmtTokens(last.fresh)}`, note: true },
     { text: DIVIDER },
-    urgent ? { text: `⏱${fmtClock(left)}`, paint: 'mark' } : { text: `⏱${fmtClock(left)}` },
+    urgent ? { text: `⏱ ${fmtClock(left)}`, paint: 'mark' } : { text: `⏱ ${fmtClock(left)}` },
   ]
   if (advice.kind !== 'warm') {
     parts.push({ text: ` · ${advice.text}`, note: true })
@@ -547,8 +547,8 @@ export const register: Register = (on, options) => {
     const { Box, Text } = $.ui.resolve(e)
     const columns = e.props.bodyColumns // UsageBar: в оригинале e.viewport.columns
     const cache = showCache && last && advice.kind !== 'off' ? cacheSegment(last, advice, left) : null
-    // бар кеша той же ширины, что и бары лимитов; подсказка справа, только если влезает
-    const cacheBarWidth = usage?.fit.bar ?? BAR_COLUMNS.min
+    // бар кеша короткий, как в оригинале: 10 клеток, на узком терминале 6; подсказка справа, только если влезает
+    const cacheBarWidth = columns >= 90 ? 10 : 6
     const cacheNotes = cache !== null && cache.label.length + 2 + cacheBarWidth + partsWidth(cache.parts, true) <= columns
     const drawSegment = (segment: Segment, barWidth: number, notes: boolean, label: string) => (
       <Box flexDirection="row" gap={1}>
